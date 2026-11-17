@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="es"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Asistente ETF</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<style>
+:root{--bg:#f5f6f8;--fg:#15202b;--card:#e9ecf1;--me:#1d4e6b;--mf:#fff;--bd:#cfd5de;--ac:#1d4e6b;--mut:#5d6b7a}
+[data-t=dark]{--bg:#0f1419;--fg:#e6eaef;--card:#1a222b;--me:#2c6a8f;--mf:#fff;--bd:#2c3744;--ac:#7db3d3;--mut:#8b9aab}
+*{box-sizing:border-box}html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--fg);font:16px/1.5 system-ui,sans-serif;display:flex;flex-direction:column;padding-top:env(safe-area-inset-top,0)}
+header{display:flex;align-items:center;gap:6px;padding:10px 12px;border-bottom:1px solid var(--bd)}
+header h1{flex:1;margin:0;font:600 17px/1.2 Palatino,"Iowan Old Style",Georgia,serif}
+header small{display:block;font:12px system-ui;color:var(--mut);font-weight:400}
+button{font:inherit;background:var(--card);color:var(--fg);border:1px solid var(--bd);border-radius:10px;padding:8px 11px;min-width:42px}
+button.on{background:var(--ac);color:var(--bg);border-color:var(--ac)}
+#chat{flex:1;overflow-y:auto;padding:14px 12px;display:flex;flex-direction:column;gap:10px}
+.m{max-width:88%;padding:10px 13px;border-radius:14px;white-space:pre-wrap;word-wrap:break-word}
+.u{align-self:flex-end;background:var(--me);color:var(--mf)}
+.a{align-self:flex-start;background:var(--card);font-family:Palatino,"Iowan Old Style",Georgia,serif;font-size:17px}
+pre{background:#0003;padding:8px;border-radius:8px;overflow-x:auto;white-space:pre}
+code{font-family:monospace}
+.empty{margin:auto;text-align:center;color:var(--mut);max-width:300px}
+#bar{display:flex;gap:6px;align-items:flex-end;padding:8px 10px calc(8px + env(safe-area-inset-bottom,0));border-top:1px solid var(--bd)}
+#in{flex:1;resize:none;max-height:120px;font:inherit;padding:9px 11px;border-radius:12px;border:1px solid var(--bd);background:var(--card);color:var(--fg)}
+#stat{display:none;padding:6px 12px;font-size:14px;color:#e8a33d}
+#chip{display:none;padding:6px 12px;font-size:13px;color:var(--mut)}
+dialog{width:92%;max-width:520px;max-height:88%;border:1px solid var(--bd);border-radius:14px;background:var(--bg);color:var(--fg);padding:14px}
+dialog::backdrop{background:#0007}
+label{display:block;margin:10px 0 3px;font-size:13px;color:var(--mut)}
+dialog input,dialog textarea{width:100%;font:inherit;padding:8px;border-radius:8px;border:1px solid var(--bd);background:var(--card);color:var(--fg)}
+dialog textarea{min-height:110px}
+#mems textarea{min-height:56px;resize:vertical}
+details summary{cursor:pointer;padding:8px 0;font-weight:600}
+.row{display:flex;gap:6px;margin-top:10px;flex-wrap:wrap}
+</style></head><body>
+<header>
+<h1 id="ttl">Asistente ETF<small id="sub">Desarrollado por Oscar Pellegrino</small></h1>
+<button id="bLive" title="Modo live">🎧</button>
+<button id="bTts" title="Leer respuestas">🔊</button>
+<button id="bTh" title="Tema">◐</button>
+<button id="bSet" title="Ajustes">⚙</button>
+</header>
+<div id="chat"></div>
+<div id="chip"></div>
+<div id="stat"></div>
+<div id="bar">
+<button id="bAtt" title="Imagen o PDF">📎</button>
+<textarea id="in" rows="1" placeholder="Escribe o usa el micrófono"></textarea>
+<button id="bMic" title="Dictar">🎤</button>
+<button id="bSend" class="on" title="Enviar">➤</button>
+</div>
+<input type="file" id="file" accept="image/*,application/pdf" hidden>
+<dialog id="st">
+<b>Ajustes</b>
+<label>Clave de OpenRouter (cada persona usa la suya)</label><input id="fKey" type="password" placeholder="sk-or-...">
+<details><summary>Memoria: lo que debe recordar siempre de ti (10 espacios)</summary><div id="mems"></div></details>
+<div class="row"><button id="bClear">Borrar conversación</button><button id="bOk" class="on">Guardar</button></div>
+</dialog>
+<dialog id="ad">
+<b>Administración</b>
+<label>Modelo (solo en este teléfono)</label><select id="fPre"></select>
+<input id="fModel" placeholder="o pega aquí el nombre exacto: proveedor/modelo" style="margin-top:6px">
+<div class="row"><button id="bMods">Cargar todos los modelos de OpenRouter</button></div>
+<label>Instrucciones del asistente (solo en este teléfono)</label><textarea id="fSys"></textarea>
+<div class="row"><button id="bReset">Restaurar instrucciones</button><button id="bNone">Sin instrucciones</button></div>
+<div class="row"><button id="bExit">Salir de admin</button><button id="bAdOk" class="on">Guardar</button></div>
+</dialog>
+<script>
+const PIN="7391";
+const DEFMODEL="google/gemma-4-31b-it:free";
+const DEF="Eres el Asistente ETF, un asistente de IA que pertenece a la empresa ETF. Esta aplicación fue desarrollada por Oscar Pellegrino. Tu enfoque central es la teología reformada: soberanía de Dios, sola Scriptura, sola gratia, sola fide, y las confesiones históricas (Westminster, Heidelberg, Dort, Belga). Explica con rigor exegético y claridad, citando pasajes bíblicos cuando ayude. Fuiste creado para la empresa ETF y desarrollado para hablar de teología reformada, pero puedes conversar con libertad y con el mismo nivel sobre cualquier otro tema o disciplina. Usa la información que el usuario guardó sobre sí mismo para personalizar tus respuestas. Responde en el idioma del usuario. Si te preguntan quién eres, di que eres el Asistente ETF y que la aplicación es de Oscar Pellegrino. Nunca afirmes ser humano. Hablas desde la fe reformada y la Biblia: sostienes que la vida humana es sagrada desde la concepción y que el aborto es contrario a la Escritura, y que la práctica homosexual también lo es; nunca los defiendes ni los presentas como buenos. Rechazas la violencia. Nunca emites mensajes de odio: tratas siempre con respeto y compasión a las personas que piensan distinto, y explicas la postura bíblica con argumentos y pasajes. Si te piden datos objetivos (leyes, ciencia, historia), los das con exactitud. Tu postura se refiere al aborto provocado; el aborto espontáneo (pérdida natural del embarazo) es un tema médico y biológico que explicas con normalidad y sensibilidad. Esta postura no limita tu utilidad: ayudas a estudiar cualquier materia (biología, medicina, historia, ciencias, lo que sea) con rigor y sin esquivar los temas.";
+const $=s=>document.querySelector(s);
+let S={key:"",model:DEFMODEL,sys:DEF,mem:"",mems:[],theme:"auto",tts:false,msgs:[],admin:false};
+try{Object.assign(S,JSON.parse(localStorage.getItem("etf")||"{}"))}catch(e){}
+if(!S.admin){S.sys=DEF;S.model=DEFMODEL}
+const MEMS=[["Nombre","Ej.: Oscar"],["Apellido",""],["A qué me dedico","Ej.: escritor y teólogo"],["Qué he estudiado o estoy estudiando",""],["Libros que leo o me gustan",""],["Gustos",""],["Aficiones",""],["Mi postura o tradición teológica",""],["Cómo quiero que me respondas","Ej.: con texto bíblico, breve o detallado"],["Otras cosas que debes recordar",""]];
+S.mems=MEMS.map((_,i)=>(S.mems&&S.mems[i])||"");
+if(S.mem&&!S.mems.some(x=>x)){S.mems[9]=S.mem}S.mem="";
+const memTxt=()=>MEMS.map((m,i)=>S.mems[i]?m[0]+": "+S.mems[i]:"").filter(Boolean).join("\n");
+const sysOf=()=>S.admin?S.sys:DEF,modelOf=()=>S.admin&&S.model?S.model:DEFMODEL,keyOf=()=>S.key;
+const save=()=>{try{localStorage.setItem("etf",JSON.stringify(S))}catch(e){}};
+let pend={img:null,pdf:null},busy=false,live=false,rec=null;
+const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+
+function theme(){const t=S.theme==="auto"?(matchMedia("(prefers-color-scheme:dark)").matches?"dark":"light"):S.theme;document.documentElement.dataset.t=t}
+function md(s){return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/```(?:\w*\n)?([\s\S]*?)```/g,"<pre>$1</pre>").replace(/`([^`\n]+)`/g,"<code>$1</code>").replace(/\*\*([^*]+)\*\*/g,"<b>$1</b>")}
+function draw(){const b=$("#chat");b.innerHTML="";
+ if(!S.msgs.length){b.innerHTML='<div class="empty">Pregunta sobre teología reformada o cualquier otro tema.</div>'}
+ S.msgs.forEach(m=>{const d=document.createElement("div");d.className="m "+(m.role==="user"?"u":"a");d.innerHTML=md(m.t);b.appendChild(d)});
+ b.scrollTop=b.scrollHeight}
+function flags(){$("#bLive").classList.toggle("on",live);$("#bTts").classList.toggle("on",S.tts)}
+
+/* voz */
+let speaking=false;
+function stopSpeak(){speaking=false;try{speechSynthesis.cancel()}catch(e){}}
+function speak(text,done){
+ const clean=text.replace(/```[\s\S]*?```/g," ").replace(/[*`#_>]/g,"");
+ const parts=clean.match(/[^.!?\n]+[.!?]*/g)||[];
+ const q=[];let cur="";parts.forEach(p=>{if((cur+p).length>180){if(cur)q.push(cur);cur=p}else cur+=p});if(cur)q.push(cur);
+ if(!q.length||!window.speechSynthesis){done&&done();return}
+ speaking=true;let i=0;
+ const vs=(speechSynthesis.getVoices&&speechSynthesis.getVoices())||[],v=vs.find(x=>x.lang.toLowerCase().startsWith("es"));let started=false;
+ setTimeout(()=>{if(!started&&speaking)stat("El teléfono no está hablando. Sube el volumen multimedia y revisa Ajustes > Texto a voz (voz en español).")},4000);
+ const next=()=>{if(!speaking||i>=q.length){speaking=false;done&&done();return}
+  const u=new SpeechSynthesisUtterance(q[i++]);if(v)u.voice=v;u.lang=v?v.lang:"es-ES";u.onstart=()=>{started=true;stat("")};u.onend=next;u.onerror=next;speechSynthesis.speak(u)};
+ next()}
+function listen(fill){
+ if(!SR){alert("Este navegador no tiene reconocimiento de voz. Usa Chrome.");live=false;flags();return}
+ if(!window.isSecureContext){live=false;flags();stat("El micrófono no funciona con el archivo abierto desde Descargas (la dirección empieza con content://). Hay que abrir la app desde una dirección https, por ejemplo GitHub Pages.");return}
+ unlock();
+ try{rec&&rec.abort()}catch(e){}
+ rec=new SR();rec.lang="es-ES";rec.interimResults=false;
+ rec.onstart=()=>stat("🎤 Escuchando...");
+ rec.onresult=e=>{stat("");const t=e.results[0][0].transcript;if(fill){$("#in").value+=(($("#in").value?" ":"")+t)}else send(t)};
+ rec.onerror=e=>{rec._e=1;const M={"not-allowed":"Chrome no tiene permiso de micrófono para esta página.","service-not-allowed":"Chrome bloqueó el reconocimiento de voz en esta página.","audio-capture":"No encuentro el micrófono.","network":"El reconocimiento de voz necesita internet."};
+  if(M[e.error]){live=false;flags();stat(M[e.error])}};
+ rec.onend=()=>{if(!rec._e&&!live)stat("");if(live&&!fill&&!busy&&!speaking)setTimeout(()=>{if(live&&!busy&&!speaking)listen()},350)};
+ try{rec.start()}catch(e){}}
+
+/* adjuntos */
+function stat(t){const c=$("#stat");c.style.display=t?"block":"none";c.textContent=t||""}
+function unlock(){try{speechSynthesis.speak(new SpeechSynthesisUtterance(""))}catch(e){}}
+function chip(t){const c=$("#chip");c.style.display=t?"block":"none";c.textContent=t||""}
+function refreshChip(){const t=[];if(pend.img)t.push("🖼 imagen");if(pend.pdf)t.push("📎 "+pend.pdf.name);chip(t.length?t.join("  ")+"  (toca para quitar)":"")}
+$("#chip").onclick=()=>{pend={img:null,pdf:null};refreshChip()};
+async function shrink(f){const bm=await createImageBitmap(f),k=Math.min(1,1280/Math.max(bm.width,bm.height));
+ const c=document.createElement("canvas");c.width=bm.width*k;c.height=bm.height*k;c.getContext("2d").drawImage(bm,0,0,c.width,c.height);return c.toDataURL("image/jpeg",.85)}
+async function pdfText(f){pdfjsLib.GlobalWorkerOptions.workerSrc="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+ const d=await pdfjsLib.getDocument({data:await f.arrayBuffer()}).promise;let o="";
+ for(let i=1;i<=d.numPages&&o.length<40000;i++){const p=await d.getPage(i),t=await p.getTextContent();o+=t.items.map(x=>x.str).join(" ")+"\n"}
+ return o.slice(0,40000)}
+$("#bAtt").onclick=()=>$("#file").click();
+$("#file").onchange=async e=>{const f=e.target.files[0];e.target.value="";if(!f)return;
+ try{if(f.type.startsWith("image/")){pend.img=await shrink(f)}
+ else if(f.type==="application/pdf"){chip("Leyendo PDF...");pend.pdf={name:f.name,text:await pdfText(f)}}
+ else alert("Solo imágenes o PDF.")}catch(x){alert("No pude leer ese archivo.")}
+ refreshChip()};
+
+/* chat */
+async function send(text){
+ text=(text!==undefined?text:$("#in").value).trim();
+ if(busy||(!text&&!pend.img&&!pend.pdf))return;
+ if(!keyOf()){$("#st").showModal();return}
+ stopSpeak();unlock();
+ let c=text,t=text,api;
+ if(pend.pdf){c="[Documento PDF: "+pend.pdf.name+"]\n"+pend.pdf.text+"\n\n"+text;t="📎 "+pend.pdf.name+"\n"+text}
+ api=c;
+ if(pend.img){api=[{type:"text",text:c||"Describe esta imagen."},{type:"image_url",image_url:{url:pend.img}}];t="🖼 imagen\n"+t;c=(c||"")+" [imagen enviada]"}
+ const hist=S.msgs.slice(-30).map(m=>({role:m.role,content:m.c}));
+ S.msgs.push({role:"user",t,c});
+ const a={role:"assistant",t:"…",c:""};S.msgs.push(a);
+ pend={img:null,pdf:null};refreshChip();$("#in").value="";draw();busy=true;
+ const base=sysOf(),mt=memTxt(),sys=base+(mt?(base?"\n\n":"")+"Memoria sobre el usuario:\n"+mt:"");
+ let out="";
+ try{
+  const r=await fetch("https://openrouter.ai/api/v1/chat/completions",{method:"POST",
+   headers:{"Content-Type":"application/json","Authorization":"Bearer "+keyOf(),"X-Title":"Asistente ETF"},
+   body:JSON.stringify({model:modelOf(),stream:true,messages:[...(sys?[{role:"system",content:sys}]:[]),...hist,{role:"user",content:api}]})});
+  if(!r.ok){const H={401:"La clave no es válida o fue borrada.",402:"Este modelo es de pago y tu cuenta no tiene créditos. Carga saldo en OpenRouter o elige uno que termine en :free.",404:"OpenRouter no encontró ese modelo, o los modelos gratis están bloqueados por tu configuración de privacidad (openrouter.ai/settings/privacy).",429:"Llegaste al límite de peticiones de este modelo. Espera un rato o prueba otro."};
+   throw new Error((H[r.status]||"Error "+r.status)+"\n\n"+(await r.text()).slice(0,300))}
+  const rd=r.body.getReader(),dc=new TextDecoder();let buf="";
+  for(;;){const {done,value}=await rd.read();if(done)break;
+   buf+=dc.decode(value,{stream:true});const ls=buf.split("\n");buf=ls.pop();
+   for(const l of ls){if(!l.startsWith("data: ")||l.includes("[DONE]"))continue;
+    try{const x=JSON.parse(l.slice(6)).choices?.[0]?.delta?.content;
+     if(x){out+=x;a.t=out;a.c=out;const k=$("#chat").lastChild;k.innerHTML=md(out);$("#chat").scrollTop=1e9}}catch(e){}}}
+  if(!out){a.t="(sin respuesta del modelo)";a.c=""}
+ }catch(e){a.t="⚠ "+e.message;a.c="";out=""}
+ busy=false;save();draw();
+ if(out&&(S.tts||live))speak(out,()=>{if(live)listen()});else if(live)listen();
+}
+$("#bSend").onclick=()=>send();
+$("#in").addEventListener("keydown",e=>{if(e.key==="Enter"&&!e.shiftKey&&!/Android|iPhone/i.test(navigator.userAgent)){e.preventDefault();send()}});
+$("#bMic").onclick=()=>listen(true);
+$("#bLive").onclick=()=>{live=!live;flags();if(live){S.tts=true;listen()}else{stopSpeak();try{rec&&rec.abort()}catch(e){}}};
+$("#bTts").onclick=()=>{unlock();S.tts=!S.tts;if(!S.tts)stopSpeak();flags();save()};
+$("#bTh").onclick=()=>{S.theme=document.documentElement.dataset.t==="dark"?"light":"dark";theme();save()};
+
+/* ajustes */
+const PRE=[["Gemma 4 31B · gratis · ve imágenes","google/gemma-4-31b-it:free"],["Gemma 4 26B · gratis · ve imágenes","google/gemma-4-26b-a4b-it:free"],["Nemotron 3.5 Super VL · gratis · documentos e imágenes","nvidia/nemotron-3.5-super-vl:free"],["Nemotron 3 Ultra 550B · gratis · solo texto, el más grande","nvidia/nemotron-3-ultra-550b-a55b:free"],["Gemma 4 31B · de pago, barato y estable","google/gemma-4-31b-it"],["Gemma 4 26B · de pago, el más barato","google/gemma-4-26b-a4b-it"]];
+function fillPre(list){const s=$("#fPre");s.innerHTML='<option value="">Elegir modelo de la lista...</option>'+list.map(m=>'<option value="'+m[1]+'">'+m[0]+'</option>').join("")}
+$("#fPre").onchange=e=>{if(e.target.value)$("#fModel").value=e.target.value};
+fillPre(PRE);
+
+function subtitle(){$("#sub").textContent="Desarrollado por Oscar Pellegrino"+(S.admin?" · admin":"")}
+function openAd(){$("#fModel").value=S.model;$("#fSys").value=S.sys;$("#ad").showModal()}
+$("#mems").innerHTML=MEMS.map((m,i)=>'<label>'+(i+1)+'. '+m[0]+'</label><textarea data-i="'+i+'" placeholder="'+m[1]+'"></textarea>').join("");
+$("#bSet").onclick=()=>{$("#fKey").value=S.key;document.querySelectorAll("#mems textarea").forEach(t=>t.value=S.mems[+t.dataset.i]);$("#st").showModal()};
+$("#bOk").onclick=()=>{S.key=$("#fKey").value.trim();document.querySelectorAll("#mems textarea").forEach(t=>{S.mems[+t.dataset.i]=t.value.trim()});save();$("#st").close()};
+$("#bAdOk").onclick=()=>{S.model=$("#fModel").value.trim()||DEFMODEL;S.sys=$("#fSys").value.trim();save();$("#ad").close()};
+$("#bReset").onclick=()=>{$("#fSys").value=DEF};
+$("#bNone").onclick=()=>{$("#fSys").value=""};
+$("#bExit").onclick=()=>{S.admin=false;S.sys=DEF;S.model=DEFMODEL;save();subtitle();$("#ad").close()};
+$("#bClear").onclick=()=>{if(confirm("¿Borrar toda la conversación?")){S.msgs=[];save();draw();$("#st").close()}};
+let taps=0,tt;
+$("#ttl").addEventListener("click",()=>{taps++;clearTimeout(tt);tt=setTimeout(()=>{taps=0},2500);
+ if(taps>=7){taps=0;if(S.admin)openAd();else{const p=prompt("PIN");if(p===PIN){S.admin=true;save();subtitle();openAd()}}}});
+$("#bMods").onclick=async()=>{try{const j=await(await fetch("https://openrouter.ai/api/v1/models")).json();
+ const all=j.data.map(m=>[m.id,m.id]).sort((a,b)=>(b[1].endsWith(":free")-a[1].endsWith(":free"))||a[1].localeCompare(b[1]));
+ fillPre(PRE.concat(all));alert(all.length+" modelos cargados. Los gratis (:free) van primero.")}catch(e){alert("No pude cargar la lista.")}};
+theme();flags();draw();subtitle();
+</script></body></html>
